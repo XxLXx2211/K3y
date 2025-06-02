@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Icon Generator</title>
+</head>
+<body>
+    <h1>Generador de Iconos PWA</h1>
+    <p>Sube tu archivo .ico y genera iconos PNG en diferentes tamaños:</p>
+    
+    <input type="file" id="fileInput" accept=".ico,.png,.jpg,.jpeg" />
+    <br><br>
+    
+    <canvas id="canvas192" width="192" height="192" style="border: 1px solid #ccc; margin: 10px;"></canvas>
+    <canvas id="canvas512" width="512" height="512" style="border: 1px solid #ccc; margin: 10px;"></canvas>
+    
+    <br><br>
+    <button id="download192">Descargar icon-192.png</button>
+    <button id="download512">Descargar icon-512.png</button>
+    
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const canvas192 = document.getElementById('canvas192');
+        const canvas512 = document.getElementById('canvas512');
+        const ctx192 = canvas192.getContext('2d');
+        const ctx512 = canvas512.getContext('2d');
+        
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const img = new Image();
+                    img.onload = function() {
+                        // Dibujar en canvas 192x192
+                        ctx192.clearRect(0, 0, 192, 192);
+                        ctx192.drawImage(img, 0, 0, 192, 192);
+                        
+                        // Dibujar en canvas 512x512
+                        ctx512.clearRect(0, 0, 512, 512);
+                        ctx512.drawImage(img, 0, 0, 512, 512);
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        
+        document.getElementById('download192').addEventListener('click', function() {
+            const link = document.createElement('a');
+            link.download = 'icon-192.png';
+            link.href = canvas192.toDataURL();
+            link.click();
+        });
+        
+        document.getElementById('download512').addEventListener('click', function() {
+            const link = document.createElement('a');
+            link.download = 'icon-512.png';
+            link.href = canvas512.toDataURL();
+            link.click();
+        });
+    </script>
+</body>
+</html>
