@@ -1,37 +1,47 @@
 import React from "react";
-import { Card, Input, Button, Table, TableHeader, TableColumn, TableBody, TableRow, TableCell, Chip, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure, Tooltip } from "@heroui/react";
+import { Card, Input, Button, Table, TableHeader, TableColumn, TableBody, TableRow, TableCell, Chip, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure, Tooltip, Tabs, Tab } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { ApiKeyForm } from "./components/api-key-form";
-import { ApiKeyItem } from "./types/api-key";
+import { PasswordForm } from "./components/password-form";
+import { ApiKeyItem, PasswordItem } from "./types/api-key";
 import { apiKeyService } from "./services/api-key-service";
+import { passwordService } from "./services/password-service";
 
 export default function App() {
   const [apiKeys, setApiKeys] = React.useState<ApiKeyItem[]>([]);
+  const [passwords, setPasswords] = React.useState<PasswordItem[]>([]);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [activeTab, setActiveTab] = React.useState("api-keys");
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
   const [selectedKey, setSelectedKey] = React.useState<ApiKeyItem | null>(null);
+  const [selectedPassword, setSelectedPassword] = React.useState<PasswordItem | null>(null);
 
-  // Load API keys from Supabase
+  // Load data from Supabase
   React.useEffect(() => {
-    const loadApiKeys = async () => {
+    const loadData = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Load API keys from Supabase
-        const keys = await apiKeyService.getAllApiKeys();
+        // Load both API keys and passwords
+        const [keys, passwordsData] = await Promise.all([
+          apiKeyService.getAllApiKeys(),
+          passwordService.getAllPasswords()
+        ]);
+
         setApiKeys(keys);
+        setPasswords(passwordsData);
       } catch (err) {
-        console.error('Error loading API keys:', err);
-        setError('Failed to load API keys. Please try again.');
+        console.error('Error loading data:', err);
+        setError('Failed to load data. Please try again.');
       } finally {
         setLoading(false);
       }
     };
 
-    loadApiKeys();
+    loadData();
   }, []);
 
   const filteredKeys = React.useMemo(() => {
@@ -46,6 +56,19 @@ export default function App() {
       (key.description && key.description.toLowerCase().includes(searchQuery.toLowerCase()))
     );
   }, [apiKeys, searchQuery]);
+
+  const filteredPasswords = React.useMemo(() => {
+    if (searchQuery.trim() === '') {
+      return passwords;
+    }
+
+    return passwords.filter(password =>
+      password.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      password.service.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      password.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (password.description && password.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [passwords, searchQuery]);
 
   const handleAddKey = async (newKey: ApiKeyItem) => {
     try {
@@ -67,10 +90,7 @@ export default function App() {
     }
   };
 
-  const handleEdit = (key: ApiKeyItem) => {
-    setSelectedKey(key);
-    onOpen();
-  };
+
 
   const handleDelete = async (id: string) => {
     try {
@@ -88,19 +108,64 @@ export default function App() {
     navigator.clipboard.writeText(key);
   };
 
+  // Password handlers
+  const handleAddPassword = async (newPassword: PasswordItem) => {
+    try {
+      if (selectedPassword) {
+        // Update existing password
+        const updatedPassword = await passwordService.updatePassword(selectedPassword.id, newPassword);
+        if (updatedPassword) {
+          setPasswords(passwords.map(password => password.id === selectedPassword.id ? updatedPassword : password));
+        }
+        setSelectedPassword(null);
+      } else {
+        // Create new password
+        const createdPassword = await passwordService.createPassword(newPassword);
+        setPasswords([createdPassword, ...passwords]);
+      }
+    } catch (err) {
+      console.error('Error saving password:', err);
+      setError('Failed to save password. Please try again.');
+    }
+  };
+
+  const handleEditPassword = (password: PasswordItem) => {
+    setSelectedPassword(password);
+    setSelectedKey(null); // Clear API key selection
+    onOpen();
+  };
+
+  const handleDeletePassword = async (id: string) => {
+    try {
+      const success = await passwordService.deletePassword(id);
+      if (success) {
+        setPasswords(passwords.filter(password => password.id !== id));
+      }
+    } catch (err) {
+      console.error('Error deleting password:', err);
+      setError('Failed to delete password. Please try again.');
+    }
+  };
+
+  const handleEdit = (key: ApiKeyItem) => {
+    setSelectedKey(key);
+    setSelectedPassword(null); // Clear password selection
+    onOpen();
+  };
+
   const renderKeyValue = (key: string) => {
     const visiblePart = key.substring(0, 4);
     const hiddenPart = "•".repeat(Math.max(0, key.length - 8));
     const lastPart = key.substring(key.length - 4);
-    
+
     return (
       <div className="flex items-center gap-2">
         <span>{visiblePart}{hiddenPart}{lastPart}</span>
         <Tooltip content="Copy to clipboard">
-          <Button 
-            isIconOnly 
-            size="sm" 
-            variant="light" 
+          <Button
+            isIconOnly
+            size="sm"
+            variant="light"
             onPress={() => handleCopyKey(key)}
           >
             <Icon icon="lucide:copy" className="text-default-500" />
@@ -110,12 +175,24 @@ export default function App() {
     );
   };
 
+  const handleOpenApiKeyModal = () => {
+    setSelectedKey(null);
+    setSelectedPassword(null);
+    onOpen();
+  };
+
+  const handleOpenPasswordModal = () => {
+    setSelectedPassword(null);
+    setSelectedKey(null);
+    onOpen();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background p-4 md:p-8 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-default-600">Loading API keys...</p>
+          <p className="text-default-600">Loading data...</p>
         </div>
       </div>
     );
@@ -124,7 +201,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-6">API Key Manager</h1>
+        <h1 className="text-2xl font-semibold mb-6">K3y - Security Manager</h1>
 
         {error && (
           <Card className="mb-6 border-danger-200 bg-danger-50">
@@ -145,110 +222,238 @@ export default function App() {
             </div>
           </Card>
         )}
-        
-        <Card className="mb-6">
-          <div className="p-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <Input
-              placeholder="Search by name, service or category..."
-              value={searchQuery}
-              onValueChange={setSearchQuery}
-              startContent={<Icon icon="lucide:search" className="text-default-400" />}
-              className="max-w-md"
-            />
-            <Button 
-              color="primary" 
-              onPress={onOpen}
-              startContent={<Icon icon="lucide:plus" />}
-            >
-              Add New API Key
-            </Button>
-          </div>
-        </Card>
-        
-        <Card>
-          <Table 
-            aria-label="API Keys table"
-            removeWrapper
-            classNames={{
-              th: "bg-default-50 text-default-600",
-            }}
-          >
-            <TableHeader>
-              <TableColumn>NAME</TableColumn>
-              <TableColumn>SERVICE</TableColumn>
-              <TableColumn>CATEGORY</TableColumn>
-              <TableColumn>API KEY</TableColumn>
-              <TableColumn>ACTIONS</TableColumn>
-            </TableHeader>
-            <TableBody emptyContent="No API keys found. Add your first one!">
-              {filteredKeys.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{item.name}</span>
-                      {item.description && (
-                        <span className="text-tiny text-default-400">{item.description}</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>{item.service}</TableCell>
-                  <TableCell>
-                    <Chip 
-                      size="sm" 
-                      variant="flat" 
-                      color={getCategoryColor(item.category)}
-                    >
-                      {item.category}
-                    </Chip>
-                  </TableCell>
-                  <TableCell>{renderKeyValue(item.key)}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Tooltip content="Edit">
-                        <Button 
-                          isIconOnly 
-                          size="sm" 
-                          variant="light" 
-                          onPress={() => handleEdit(item)}
-                        >
-                          <Icon icon="lucide:edit" className="text-default-500" />
-                        </Button>
-                      </Tooltip>
-                      <Tooltip content="Delete">
-                        <Button 
-                          isIconOnly 
-                          size="sm" 
-                          variant="light" 
-                          color="danger" 
-                          onPress={() => handleDelete(item.id)}
-                        >
-                          <Icon icon="lucide:trash-2" />
-                        </Button>
-                      </Tooltip>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+
+        <Tabs
+          selectedKey={activeTab}
+          onSelectionChange={(key) => setActiveTab(key as string)}
+          className="mb-6"
+        >
+          <Tab key="api-keys" title={
+            <div className="flex items-center gap-2">
+              <Icon icon="lucide:key" />
+              <span>API Keys</span>
+            </div>
+          }>
+            <div className="space-y-6">
+              <Card>
+                <div className="p-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <Input
+                    placeholder="Search API keys..."
+                    value={searchQuery}
+                    onValueChange={setSearchQuery}
+                    startContent={<Icon icon="lucide:search" className="text-default-400" />}
+                    className="max-w-md"
+                  />
+                  <Button
+                    color="primary"
+                    onPress={handleOpenApiKeyModal}
+                    startContent={<Icon icon="lucide:plus" />}
+                  >
+                    Add New API Key
+                  </Button>
+                </div>
+              </Card>
+
+              <Card>
+                <Table
+                  aria-label="API Keys table"
+                  removeWrapper
+                  classNames={{
+                    th: "bg-default-50 text-default-600",
+                  }}
+                >
+                  <TableHeader>
+                    <TableColumn>NAME</TableColumn>
+                    <TableColumn>SERVICE</TableColumn>
+                    <TableColumn>CATEGORY</TableColumn>
+                    <TableColumn>API KEY</TableColumn>
+                    <TableColumn>ACTIONS</TableColumn>
+                  </TableHeader>
+                  <TableBody emptyContent="No API keys found. Add your first one!">
+                    {filteredKeys.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{item.name}</span>
+                            {item.description && (
+                              <span className="text-tiny text-default-400">{item.description}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{item.service}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="sm"
+                            variant="flat"
+                            color={getCategoryColor(item.category)}
+                          >
+                            {item.category}
+                          </Chip>
+                        </TableCell>
+                        <TableCell>{renderKeyValue(item.key)}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Tooltip content="Edit">
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="light"
+                                onPress={() => handleEdit(item)}
+                              >
+                                <Icon icon="lucide:edit" className="text-default-500" />
+                              </Button>
+                            </Tooltip>
+                            <Tooltip content="Delete">
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="light"
+                                color="danger"
+                                onPress={() => handleDelete(item.id)}
+                              >
+                                <Icon icon="lucide:trash-2" />
+                              </Button>
+                            </Tooltip>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+            </div>
+          </Tab>
+
+          <Tab key="passwords" title={
+            <div className="flex items-center gap-2">
+              <Icon icon="lucide:lock" />
+              <span>Passwords</span>
+            </div>
+          }>
+            <div className="space-y-6">
+              <Card>
+                <div className="p-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <Input
+                    placeholder="Search passwords..."
+                    value={searchQuery}
+                    onValueChange={setSearchQuery}
+                    startContent={<Icon icon="lucide:search" className="text-default-400" />}
+                    className="max-w-md"
+                  />
+                  <Button
+                    color="primary"
+                    onPress={handleOpenPasswordModal}
+                    startContent={<Icon icon="lucide:plus" />}
+                  >
+                    Add New Password
+                  </Button>
+                </div>
+              </Card>
+
+              <Card>
+                <Table
+                  aria-label="Passwords table"
+                  removeWrapper
+                  classNames={{
+                    th: "bg-default-50 text-default-600",
+                  }}
+                >
+                  <TableHeader>
+                    <TableColumn>NAME</TableColumn>
+                    <TableColumn>SERVICE</TableColumn>
+                    <TableColumn>CATEGORY</TableColumn>
+                    <TableColumn>PASSWORD</TableColumn>
+                    <TableColumn>ACTIONS</TableColumn>
+                  </TableHeader>
+                  <TableBody emptyContent="No passwords found. Add your first one!">
+                    {filteredPasswords.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{item.name}</span>
+                            {item.description && (
+                              <span className="text-tiny text-default-400">{item.description}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{item.service}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="sm"
+                            variant="flat"
+                            color={getCategoryColor(item.category)}
+                          >
+                            {item.category}
+                          </Chip>
+                        </TableCell>
+                        <TableCell>{renderKeyValue(item.password)}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Tooltip content="Edit">
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="light"
+                                onPress={() => handleEditPassword(item)}
+                              >
+                                <Icon icon="lucide:edit" className="text-default-500" />
+                              </Button>
+                            </Tooltip>
+                            <Tooltip content="Delete">
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="light"
+                                color="danger"
+                                onPress={() => handleDeletePassword(item.id)}
+                              >
+                                <Icon icon="lucide:trash-2" />
+                              </Button>
+                            </Tooltip>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+            </div>
+          </Tab>
+        </Tabs>
       </div>
 
-      <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="lg">
+      <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="2xl">
         <ModalContent>
           {(onClose) => (
             <>
               <ModalHeader className="flex flex-col gap-1">
-                {selectedKey ? "Edit API Key" : "Add New API Key"}
+                {selectedKey
+                  ? "Edit API Key"
+                  : selectedPassword
+                    ? "Edit Password"
+                    : activeTab === "passwords"
+                      ? "Add New Password"
+                      : "Add New API Key"
+                }
               </ModalHeader>
               <ModalBody>
-                <ApiKeyForm
-                  initialData={selectedKey}
-                  onSubmit={async (data) => {
-                    await handleAddKey(data);
-                    onClose();
-                  }}
-                />
+                {(selectedKey || (!selectedPassword && activeTab === "api-keys")) ? (
+                  <ApiKeyForm
+                    initialData={selectedKey}
+                    onSubmit={async (data) => {
+                      await handleAddKey(data);
+                      onClose();
+                    }}
+                  />
+                ) : (
+                  <PasswordForm
+                    initialData={selectedPassword}
+                    onSubmit={async (data) => {
+                      await handleAddPassword(data);
+                      onClose();
+                    }}
+                  />
+                )}
               </ModalBody>
               <ModalFooter>
                 <Button variant="flat" onPress={onClose}>
