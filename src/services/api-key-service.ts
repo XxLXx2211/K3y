@@ -1,156 +1,193 @@
+import { supabase } from '../lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 import { ApiKeyItem } from '../types/api-key';
 
-const STORAGE_KEY = 'api-keys-database';
-
 export class ApiKeyService {
-  private getStoredData(): ApiKeyItem[] {
+
+  // Get all API keys
+  async getAllApiKeys(): Promise<ApiKeyItem[]> {
     try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      const { data, error } = await supabase
+        .from('api_keys')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching API keys:', error);
+        throw error;
+      }
+
+      return data || [];
     } catch (error) {
-      console.error('Error reading from localStorage:', error);
+      console.error('Error in getAllApiKeys:', error);
       return [];
     }
   }
 
-  private saveData(data: ApiKeyItem[]): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch (error) {
-      console.error('Error saving to localStorage:', error);
-      throw new Error('Failed to save data');
-    }
-  }
-
-  // Get all API keys
-  getAllApiKeys(): ApiKeyItem[] {
-    try {
-      const data = this.getStoredData();
-      // Sort by creation time (newest first) - we'll use id as a proxy for creation time
-      return data.sort((a, b) => b.id.localeCompare(a.id));
-    } catch (error) {
-      console.error('Error fetching API keys:', error);
-      throw new Error('Failed to fetch API keys');
-    }
-  }
-
   // Get API key by ID
-  getApiKeyById(id: string): ApiKeyItem | null {
+  async getApiKeyById(id: string): Promise<ApiKeyItem | null> {
     try {
-      const data = this.getStoredData();
-      const item = data.find(key => key.id === id);
-      return item || null;
+      const { data, error } = await supabase
+        .from('api_keys')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        console.error('Error fetching API key:', error);
+        throw error;
+      }
+
+      return data;
     } catch (error) {
-      console.error('Error fetching API key by ID:', error);
-      throw new Error('Failed to fetch API key');
+      console.error('Error in getApiKeyById:', error);
+      return null;
     }
   }
 
   // Create new API key
-  createApiKey(apiKey: Omit<ApiKeyItem, 'id'>): ApiKeyItem {
+  async createApiKey(apiKey: Omit<ApiKeyItem, 'id' | 'created_at' | 'updated_at'>): Promise<ApiKeyItem> {
     try {
-      const data = this.getStoredData();
       const id = uuidv4();
-      const newApiKey: ApiKeyItem = {
+      const now = new Date().toISOString();
+
+      const newApiKey = {
+        ...apiKey,
         id,
-        ...apiKey
+        created_at: now,
+        updated_at: now
       };
 
-      data.push(newApiKey);
-      this.saveData(data);
+      const { data, error } = await supabase
+        .from('api_keys')
+        .insert([newApiKey])
+        .select()
+        .single();
 
-      return newApiKey;
+      if (error) {
+        console.error('Error creating API key:', error);
+        throw error;
+      }
+
+      return data;
     } catch (error) {
-      console.error('Error creating API key:', error);
-      throw new Error('Failed to create API key');
+      console.error('Error in createApiKey:', error);
+      throw error;
     }
   }
 
   // Update API key
-  updateApiKey(id: string, updates: Partial<Omit<ApiKeyItem, 'id'>>): ApiKeyItem | null {
+  async updateApiKey(id: string, updates: Partial<Omit<ApiKeyItem, 'id' | 'created_at'>>): Promise<ApiKeyItem | null> {
     try {
-      const data = this.getStoredData();
-      const index = data.findIndex(key => key.id === id);
-
-      if (index === -1) {
-        return null;
-      }
-
-      // Update the item
-      const updatedItem: ApiKeyItem = {
-        ...data[index],
-        ...updates
+      const updatedData = {
+        ...updates,
+        updated_at: new Date().toISOString()
       };
 
-      data[index] = updatedItem;
-      this.saveData(data);
+      const { data, error } = await supabase
+        .from('api_keys')
+        .update(updatedData)
+        .eq('id', id)
+        .select()
+        .single();
 
-      return updatedItem;
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        console.error('Error updating API key:', error);
+        throw error;
+      }
+
+      return data;
     } catch (error) {
-      console.error('Error updating API key:', error);
-      throw new Error('Failed to update API key');
+      console.error('Error in updateApiKey:', error);
+      return null;
     }
   }
 
   // Delete API key
-  deleteApiKey(id: string): boolean {
+  async deleteApiKey(id: string): Promise<boolean> {
     try {
-      const data = this.getStoredData();
-      const initialLength = data.length;
-      const filteredData = data.filter(key => key.id !== id);
+      const { error } = await supabase
+        .from('api_keys')
+        .delete()
+        .eq('id', id);
 
-      if (filteredData.length < initialLength) {
-        this.saveData(filteredData);
-        return true;
+      if (error) {
+        console.error('Error deleting API key:', error);
+        throw error;
       }
 
-      return false;
+      return true;
     } catch (error) {
-      console.error('Error deleting API key:', error);
-      throw new Error('Failed to delete API key');
+      console.error('Error in deleteApiKey:', error);
+      return false;
     }
   }
 
   // Search API keys
-  searchApiKeys(query: string): ApiKeyItem[] {
+  async searchApiKeys(query: string): Promise<ApiKeyItem[]> {
     try {
-      const data = this.getStoredData();
-      const searchTerm = query.toLowerCase();
+      const { data, error } = await supabase
+        .from('api_keys')
+        .select('*')
+        .or(`name.ilike.%${query}%,service.ilike.%${query}%,category.ilike.%${query}%,description.ilike.%${query}%`)
+        .order('created_at', { ascending: false });
 
-      return data.filter(key =>
-        key.name.toLowerCase().includes(searchTerm) ||
-        key.service.toLowerCase().includes(searchTerm) ||
-        key.category.toLowerCase().includes(searchTerm) ||
-        (key.description && key.description.toLowerCase().includes(searchTerm))
-      ).sort((a, b) => b.id.localeCompare(a.id));
+      if (error) {
+        console.error('Error searching API keys:', error);
+        throw error;
+      }
+
+      return data || [];
     } catch (error) {
-      console.error('Error searching API keys:', error);
-      throw new Error('Failed to search API keys');
+      console.error('Error in searchApiKeys:', error);
+      return [];
     }
   }
 
   // Get API keys by category
-  getApiKeysByCategory(category: string): ApiKeyItem[] {
+  async getApiKeysByCategory(category: string): Promise<ApiKeyItem[]> {
     try {
-      const data = this.getStoredData();
-      return data.filter(key => key.category === category)
-                 .sort((a, b) => b.id.localeCompare(a.id));
+      const { data, error } = await supabase
+        .from('api_keys')
+        .select('*')
+        .eq('category', category)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching API keys by category:', error);
+        throw error;
+      }
+
+      return data || [];
     } catch (error) {
-      console.error('Error fetching API keys by category:', error);
-      throw new Error('Failed to fetch API keys by category');
+      console.error('Error in getApiKeysByCategory:', error);
+      return [];
     }
   }
 
   // Get statistics
-  getStatistics() {
+  async getStatistics() {
     try {
-      const data = this.getStoredData();
-      const total = data.length;
+      const { data, error } = await supabase
+        .from('api_keys')
+        .select('category');
+
+      if (error) {
+        console.error('Error fetching statistics:', error);
+        throw error;
+      }
+
+      const total = data?.length || 0;
 
       // Group by category
       const categoryCount: Record<string, number> = {};
-      data.forEach(key => {
+      data?.forEach(key => {
         categoryCount[key.category] = (categoryCount[key.category] || 0) + 1;
       });
 
@@ -163,8 +200,8 @@ export class ApiKeyService {
         byCategory
       };
     } catch (error) {
-      console.error('Error fetching statistics:', error);
-      throw new Error('Failed to fetch statistics');
+      console.error('Error in getStatistics:', error);
+      return { total: 0, byCategory: [] };
     }
   }
 }

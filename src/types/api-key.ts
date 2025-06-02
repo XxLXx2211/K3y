@@ -6,4 +6,6 @@ export interface ApiKeyItem {
   category: string;
   description?: string;
   expiration?: string;
+  created_at?: string;
+  updated_at?: string;
 }

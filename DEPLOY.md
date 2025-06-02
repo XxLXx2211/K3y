@@ -79,21 +79,37 @@ npm run lint
 
 ## 🚨 Notas Importantes
 
-1. **Better SQLite3:** Tu proyecto usa `better-sqlite3` que es una dependencia nativa. Esto **NO funcionará** en Netlify ya que es un entorno serverless. Considera:
-   - Usar una base de datos en la nube (Supabase, PlanetScale, etc.)
-   - Implementar un backend separado
-   - Usar localStorage para datos temporales
+1. **✅ Base de Datos:** El proyecto ahora usa **Supabase** en lugar de SQLite, por lo que funcionará perfectamente en Netlify.
 
-2. **Archivos grandes:** El bundle JS es de ~786KB. Considera code-splitting para mejorar el rendimiento.
+2. **Variables de Entorno:** Asegúrate de configurar las variables de entorno en Netlify:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
 
-3. **Scripts externos:** Tu `index.html` incluye scripts de HeroUI desde CDN, asegúrate de que estén disponibles.
+3. **Archivos grandes:** El bundle JS es de ~896KB. Considera code-splitting para mejorar el rendimiento.
+
+4. **Scripts externos:** Tu `index.html` incluye scripts de HeroUI desde CDN, asegúrate de que estén disponibles.
+
+## 🗄️ Configuración de Supabase
+
+### 1. Crear la tabla en Supabase
+1. Ve a tu proyecto en [Supabase](https://supabase.com/dashboard)
+2. Ve a SQL Editor
+3. Ejecuta el script `supabase-setup.sql` incluido en el proyecto
+4. Esto creará la tabla `api_keys` con todos los índices y políticas necesarias
+
+### 2. Configurar Variables de Entorno en Netlify
+1. Ve a tu sitio en Netlify Dashboard
+2. Site settings > Environment variables
+3. Agrega:
+   - `VITE_SUPABASE_URL`: `https://ycdwdcfkbsmmmuekstpx.supabase.co`
+   - `VITE_SUPABASE_ANON_KEY`: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
 
 ## 🎯 Próximos Pasos
 
-1. Sube el código a GitHub
-2. Conecta con Netlify
-3. Configura un dominio personalizado (opcional)
-4. Configura variables de entorno si las necesitas
-5. Considera migrar la base de datos a una solución cloud
+1. ✅ Sube el código a GitHub (Ya hecho)
+2. Ejecuta el script SQL en Supabase
+3. Conecta con Netlify
+4. Configura las variables de entorno
+5. ¡Deploy automático!
 
 ¡Tu proyecto está listo para deploy! 🎉

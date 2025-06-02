@@ -13,18 +13,15 @@ export default function App() {
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
   const [selectedKey, setSelectedKey] = React.useState<ApiKeyItem | null>(null);
 
-  // Load API keys from localStorage
+  // Load API keys from Supabase
   React.useEffect(() => {
-    const loadApiKeys = () => {
+    const loadApiKeys = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Clear any existing mock data and start fresh
-        // This ensures we start with a completely empty database
-
-        // Load API keys from localStorage (will be empty initially)
-        const keys = apiKeyService.getAllApiKeys();
+        // Load API keys from Supabase
+        const keys = await apiKeyService.getAllApiKeys();
         setApiKeys(keys);
       } catch (err) {
         console.error('Error loading API keys:', err);
@@ -54,14 +51,14 @@ export default function App() {
     try {
       if (selectedKey) {
         // Update existing key
-        const updatedKey = apiKeyService.updateApiKey(selectedKey.id, newKey);
+        const updatedKey = await apiKeyService.updateApiKey(selectedKey.id, newKey);
         if (updatedKey) {
           setApiKeys(apiKeys.map(key => key.id === selectedKey.id ? updatedKey : key));
         }
         setSelectedKey(null);
       } else {
         // Create new key
-        const createdKey = apiKeyService.createApiKey(newKey);
+        const createdKey = await apiKeyService.createApiKey(newKey);
         setApiKeys([createdKey, ...apiKeys]);
       }
     } catch (err) {
@@ -77,7 +74,7 @@ export default function App() {
 
   const handleDelete = async (id: string) => {
     try {
-      const success = apiKeyService.deleteApiKey(id);
+      const success = await apiKeyService.deleteApiKey(id);
       if (success) {
         setApiKeys(apiKeys.filter(key => key.id !== id));
       }
